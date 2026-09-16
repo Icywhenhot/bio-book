@@ -1,0 +1,33 @@
+{
+	"schemaVersion": 1,
+	"id": "biobook",
+	"version": "${version}",
+	"name": "Bio Book",
+	"description": "Clickable chat portraits, character lore, and personal journal notes.",
+	"authors": [
+		"Icy"
+	],
+	"license": "All-Rights-Reserved",
+	"icon": "assets/biobook/logo.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"dev.biobook.BioBook"
+		],
+		"client": [
+			"dev.biobook.client.BioClient"
+		]
+	},
+	"mixins": [
+		{
+			"config": "biobook.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

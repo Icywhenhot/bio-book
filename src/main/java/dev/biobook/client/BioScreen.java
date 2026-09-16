@@ -1,26 +1,27 @@
 package dev.biobook.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.biobook.BioNetwork;
 import dev.biobook.Profile;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.MultiLineEditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
-import net.neoforged.neoforge.network.PacketDistributor;
-import org.lwjgl.glfw.GLFW;
 
 public final class BioScreen extends Screen {
     private record Draft(String name, String subtitle, String lore, String note) {}
     private static final Map<UUID, Draft> DRAFTS = new HashMap<>();
-    private final Screen parent;
     private final UUID target;
     private final long opened = System.nanoTime();
     private long closing;
@@ -42,9 +43,8 @@ public final class BioScreen extends Screen {
     private float scroll, scrollTarget;
     private long tabChanged = opened;
 
-    public BioScreen(Screen parent, UUID target) {
+    public BioScreen(UUID target) {
         super(Component.literal("Bio Book"));
-        this.parent = parent;
         this.target = target;
     }
 
@@ -86,16 +86,23 @@ public final class BioScreen extends Screen {
                 nameBox.setMaxLength(Profile.NAME_LIMIT);
                 nameBox.setValue(draftName);
                 nameBox.setHint(Component.literal("Character name"));
+                nameBox.setTextShadow(false);
                 subtitleBox = addRenderableWidget(new EditBox(font, x + half + 10, editorTop, half, 18, Component.literal("Title or tagline")));
                 subtitleBox.setMaxLength(Profile.SUBTITLE_LIMIT);
                 subtitleBox.setValue(draftSubtitle);
                 subtitleBox.setHint(Component.literal("Title or tagline"));
+                subtitleBox.setTextShadow(false);
                 editorTop += 25;
             }
-            textBox = addRenderableWidget(new JournalTextBox(font, x, editorTop, panelWidth - 32,
-                    Math.max(20, bodyTop + bodyHeight - editorTop),
-                    Component.literal(tab == 1 ? "What will you remember about them?" : "Every character has a story. Tell yours..."),
-                    Component.literal(tab == 1 ? "Private character notes" : "Public character lore")));
+            textBox = addRenderableWidget(MultiLineEditBox.builder()
+                    .setX(x)
+                    .setY(editorTop)
+                    .setShowBackground(false)
+                    .setShowDecorations(false)
+                    .setTextShadow(false)
+                    .setPlaceholder(Component.literal(tab == 1 ? "What will you remember about them?" : "Every character has a story. Tell yours..."))
+                    .build(font, panelWidth - 32, Math.max(20, bodyTop + bodyHeight - editorTop),
+                            Component.literal(tab == 1 ? "Private character notes" : "Public character lore")));
             textBox.setCharacterLimit(Profile.TEXT_LIMIT);
             textBox.setValue(tab == 1 ? draftNote : draftLore);
         }
@@ -129,7 +136,7 @@ public final class BioScreen extends Screen {
         if (minecraft.getConnection() == null) return;
         pending = action;
         requested = System.nanoTime();
-        PacketDistributor.sendToServer(new BioNetwork.Request(target, action, action == 1 ? draftName : "",
+        ClientPlayNetworking.send(new BioNetwork.Request(target, action, action == 1 ? draftName : "",
                 action == 1 ? draftSubtitle : "", action == 1 ? draftLore : action == 2 ? draftNote : ""));
     }
 
@@ -186,23 +193,27 @@ public final class BioScreen extends Screen {
         else DRAFTS.put(target, new Draft(draftName, draftSubtitle, draftLore, draftNote));
     }
 
+    private void leave() {
+        minecraft.setScreenAndShow(minecraft.gui.hud.getChat().restoreChatScreen());
+    }
+
     @Override
     public void tick() {
-        if (minecraft.player == null) { minecraft.setScreen(null); return; }
+        if (minecraft.player == null) { minecraft.setScreenAndShow(null); return; }
         updateButton();
         if (pending != -1 && System.nanoTime() - requested > 8_000_000_000L) {
             pending = -1;
             status = "No response. Reopen to retry.";
             rebuild();
         }
-        if (closing != 0 && System.nanoTime() - closing > 150_000_000L) minecraft.setScreen(parent);
+        if (closing != 0 && System.nanoTime() - closing > 150_000_000L) leave();
     }
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {}
+    public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {}
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
         long now = System.nanoTime();
         float dt = Math.min((now - frame) / 1_000_000_000f, 0.1f);
         frame = now;
@@ -211,8 +222,8 @@ public final class BioScreen extends Screen {
         if (closing != 0) ease *= 1 - Mth.clamp((now - closing) / 150_000_000f, 0, 1);
         g.fillGradient(0, 0, width, height, ((int) (175 * ease) << 24) | 0x080D17, ((int) (220 * ease) << 24) | 0x080D17);
         int lift = (int) ((1 - ease) * 18);
-        g.pose().pushPose();
-        g.pose().translate(0, lift, 0);
+        g.pose().pushMatrix();
+        g.pose().translate(0, lift);
         rounded(g, left - 1, top - 1, panelWidth + 2, panelHeight + 2, 8, 0xFF514734);
         rounded(g, left, top, panelWidth, panelHeight, 8, 0xFF151C28);
         g.fillGradient(left + 8, top + 1, left + panelWidth - 8, top + 65, 0xFF263141, 0xFF151C28);
@@ -220,24 +231,47 @@ public final class BioScreen extends Screen {
         rounded(g, left + 15, top + 13, 42, 42, 5, 0xFFAA8350);
         BioClient.portrait(g, target, left + 20, top + 18, 32, 1);
         var player = minecraft.getConnection() == null ? null : minecraft.getConnection().getPlayerInfo(target);
-        String username = player == null ? "Unknown traveler" : player.getProfile().getName();
+        String username = player == null ? "Unknown traveler" : player.getProfile().name();
         String name = profile.name().isBlank() ? username : profile.name();
-        g.drawString(font, "B I O  B O O K", left + 68, top + 13, 0xFFD0AA70, false);
-        g.drawString(font, font.plainSubstrByWidth(name, panelWidth - 118), left + 68, top + 29, 0xFFF3EBDD, false);
+        g.text(font, "B I O  B O O K", left + 68, top + 13, 0xFFD0AA70, false);
+        g.text(font, font.plainSubstrByWidth(name, panelWidth - 118), left + 68, top + 29, 0xFFF3EBDD, false);
         String subtitle = profile.subtitle().isBlank() ? "@" + username + "  /  Character journal" : profile.subtitle();
-        g.drawString(font, font.plainSubstrByWidth(subtitle, panelWidth - 90), left + 68, top + 44, 0xFF9AA8BB, false);
+        g.text(font, font.plainSubstrByWidth(subtitle, panelWidth - 90), left + 68, top + 44, 0xFF9AA8BB, false);
         if (tab == 0) renderLore(g, now, dt);
         else {
-            g.drawString(font, tab == 1 ? "PRIVATE  /  Only you can read these notes" : "PUBLIC  /  Your name, title and story", left + 16, bodyTop, 0xFFB6A78E, false);
+            g.text(font, tab == 1 ? "PRIVATE  /  Only you can read these notes" : "PUBLIC  /  Your name, title and story", left + 16, bodyTop, 0xFFB6A78E, false);
+            editorFrame(g);
         }
         String footer = tab > 0 && dirty() && pending == -1 ? "Unsaved draft kept until disconnect" : status;
-        g.drawString(font, font.plainSubstrByWidth(footer, panelWidth - 145), left + 16, top + panelHeight - 23, 0xFF9AA8BB, false);
-        super.render(g, mouseX, mouseY - lift, partialTick);
-        g.pose().popPose();
+        g.text(font, font.plainSubstrByWidth(footer, panelWidth - 145), left + 16, top + panelHeight - 23, 0xFF9AA8BB, false);
+        super.extractRenderState(g, mouseX, mouseY - lift, partialTick);
+        g.pose().popMatrix();
     }
 
-    private void renderLore(GuiGraphics g, long now, float dt) {
-        g.drawString(font, "THE STORY SO FAR", left + 24, bodyTop, 0xFFD0AA70, false);
+    private void editorFrame(GuiGraphicsExtractor g) {
+        if (nameBox != null) boxFrame(g, nameBox.getX(), nameBox.getY(), nameBox.getWidth(), nameBox.getHeight(), nameBox.isFocused());
+        if (subtitleBox != null) boxFrame(g, subtitleBox.getX(), subtitleBox.getY(), subtitleBox.getWidth(), subtitleBox.getHeight(), subtitleBox.isFocused());
+        if (textBox == null) return;
+        int x = textBox.getX(), y = textBox.getY(), w = textBox.getWidth(), h = textBox.getHeight();
+        boxFrame(g, x, y, w, h, textBox.isFocused());
+        int max = textBox.maxScrollAmount();
+        if (max > 0) {
+            int thumb = Math.min(h, Math.max(12, h * h / (textBox.getInnerHeight() + 4)));
+            int sy = y + (int) (textBox.scrollAmount() * (h - thumb) / max);
+            g.fill(x + w + 2, y, x + w + 4, y + h, 0xFF303846);
+            g.fill(x + w + 2, sy, x + w + 4, sy + thumb, 0xFFC5A16C);
+        }
+        String count = textBox.getValue().length() + " / " + Profile.TEXT_LIMIT;
+        g.text(font, count, x + w - font.width(count), y + h + 4, 0xFF77869A, false);
+    }
+
+    private static void boxFrame(GuiGraphicsExtractor g, int x, int y, int w, int h, boolean focused) {
+        rounded(g, x - 1, y - 1, w + 2, h + 2, 4, focused ? 0xFFB69765 : 0xFF394454);
+        rounded(g, x, y, w, h, 3, 0xFF101722);
+    }
+
+    private void renderLore(GuiGraphicsExtractor g, long now, float dt) {
+        g.text(font, "THE STORY SO FAR", left + 24, bodyTop, 0xFFD0AA70, false);
         int textTop = bodyTop + 20;
         int available = bodyHeight - 20;
         float max = Math.max(0, lines.size() * 13 - available);
@@ -246,9 +280,9 @@ public final class BioScreen extends Screen {
         g.enableScissor(left + 20, textTop, left + panelWidth - 20, bodyTop + bodyHeight);
         float transition = 1 - Mth.clamp((now - tabChanged) / 180_000_000f, 0, 1);
         int y = textTop - (int) scroll + (int) (transition * transition * 10);
-        if (!loaded) g.drawString(font, "Turning to their chapter...", left + 24, y, 0xFF9AA8BB, false);
+        if (!loaded) g.text(font, "Turning to their chapter...", left + 24, y, 0xFF9AA8BB, false);
         else for (FormattedCharSequence line : lines) {
-            if (y + 9 >= textTop && y < bodyTop + bodyHeight) g.drawString(font, line, left + 24, y, 0xFFD5DCE5, false);
+            if (y + 9 >= textTop && y < bodyTop + bodyHeight) g.text(font, line, left + 24, y, 0xFFD5DCE5, false);
             y += 13;
         }
         g.disableScissor();
@@ -268,26 +302,26 @@ public final class BioScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int key, int scan, int modifiers) {
-        if (pending > 0 && key != GLFW.GLFW_KEY_ESCAPE) return true;
-        if (key == GLFW.GLFW_KEY_S && hasControlDown() && tab > 0) { save(); return true; }
-        if (tab == 0 && (key == GLFW.GLFW_KEY_PAGE_DOWN || key == GLFW.GLFW_KEY_PAGE_UP)) {
-            scrollTarget += (key == GLFW.GLFW_KEY_PAGE_DOWN ? 1 : -1) * bodyHeight;
+    public boolean keyPressed(KeyEvent event) {
+        if (pending > 0 && !event.isEscape()) return true;
+        if (event.key() == InputConstants.KEY_S && event.hasControlDown() && tab > 0) { save(); return true; }
+        if (tab == 0 && (event.key() == InputConstants.KEY_PAGEDOWN || event.key() == InputConstants.KEY_PAGEUP)) {
+            scrollTarget += (event.key() == InputConstants.KEY_PAGEDOWN ? 1 : -1) * bodyHeight;
             return true;
         }
-        return super.keyPressed(key, scan, modifiers);
+        return super.keyPressed(event);
     }
 
     @Override
-    public boolean mouseClicked(double x, double y, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (closing != 0 || System.nanoTime() - opened < 200_000_000L) return true;
-        if (pending > 0 && y >= bodyTop && y < bodyTop + bodyHeight) return true;
-        return super.mouseClicked(x, y, button);
+        if (pending > 0 && event.y() >= bodyTop && event.y() < bodyTop + bodyHeight) return true;
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override
-    public boolean charTyped(char character, int modifiers) {
-        return pending > 0 || super.charTyped(character, modifiers);
+    public boolean charTyped(CharacterEvent event) {
+        return pending > 0 || super.charTyped(event);
     }
 
     @Override
@@ -302,7 +336,7 @@ public final class BioScreen extends Screen {
     @Override
     public boolean isPauseScreen() { return false; }
 
-    public static void rounded(GuiGraphics g, int x, int y, int w, int h, int radius, int color) {
+    public static void rounded(GuiGraphicsExtractor g, int x, int y, int w, int h, int radius, int color) {
         g.fill(x + radius, y, x + w - radius, y + h, color);
         g.fill(x, y + radius, x + w, y + h - radius, color);
         for (int row = 0; row < radius; row++) {

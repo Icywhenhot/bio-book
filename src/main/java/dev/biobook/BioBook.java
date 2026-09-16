@@ -1,13 +1,17 @@
 package dev.biobook;
 
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.common.Mod;
+import net.fabricmc.api.ModInitializer;
+import net.minecraft.resources.Identifier;
 
-@Mod(BioBook.ID)
-public final class BioBook {
+public final class BioBook implements ModInitializer {
     public static final String ID = "biobook";
 
-    public BioBook(IEventBus bus) {
-        bus.addListener(BioNetwork::register);
+    public static Identifier id(String path) {
+        return Identifier.fromNamespaceAndPath(ID, path);
+    }
+
+    @Override
+    public void onInitialize() {
+        BioNetwork.register();
     }
 }

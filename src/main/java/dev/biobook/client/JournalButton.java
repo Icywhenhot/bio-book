@@ -2,7 +2,7 @@ package dev.biobook.client;
 
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
@@ -18,7 +18,7 @@ public final class JournalButton extends Button {
     }
 
     @Override
-    protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+    protected void extractContents(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
         long now = System.nanoTime();
         float dt = Math.min((now - frame) / 1_000_000_000f, 0.1f);
         frame = now;
@@ -27,7 +27,7 @@ public final class JournalButton extends Button {
         BioScreen.rounded(g, getX(), getY(), width, height, 4, active ? background : 0xFF202530);
         g.fill(getX() + 7, getY() + height - 2, getX() + 7 + (int) ((width - 14) * hover), getY() + height - 1, 0xFFDABD87);
         var font = Minecraft.getInstance().font;
-        g.drawString(font, getMessage(), getX() + (width - font.width(getMessage())) / 2, getY() + 7,
+        g.text(font, getMessage(), getX() + (width - font.width(getMessage())) / 2, getY() + 7,
                 !active ? 0xFF697383 : accent ? 0xFF161B24 : 0xFFECE5D8, false);
     }
 
