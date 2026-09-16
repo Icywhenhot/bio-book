@@ -1,0 +1,6 @@
+Gradle wrapper scripts
+Copyright 2015 the original author or authors.
+Licensed under the Apache License, Version 2.0.
+https://www.apache.org/licenses/LICENSE-2.0
+Distributed on an AS IS basis, without warranties or conditions of any kind.
+The wrapper scripts have been modified to remove comments.
