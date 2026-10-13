@@ -34,7 +34,7 @@ public final class BioScreen extends Screen {
     private Profile profile = Profile.EMPTY;
     private String note = "";
     private String draftName = "", draftSubtitle = "", draftLore = "", draftNote = "";
-    private String status = "Opening journal...";
+    private String status = "Loading...";
     private EditBox nameBox, subtitleBox;
     private MultiLineEditBox textBox;
     private JournalButton saveButton;
@@ -94,7 +94,7 @@ public final class BioScreen extends Screen {
             }
             textBox = addRenderableWidget(new JournalTextBox(font, x, editorTop, panelWidth - 32,
                     Math.max(20, bodyTop + bodyHeight - editorTop),
-                    Component.literal(tab == 1 ? "What will you remember about them?" : "Every character has a story. Tell yours..."),
+                    Component.literal(tab == 1 ? "Notes about this player..." : "Write your backstory..."),
                     Component.literal(tab == 1 ? "Private character notes" : "Public character lore")));
             textBox.setCharacterLimit(Profile.TEXT_LIMIT);
             textBox.setValue(tab == 1 ? draftNote : draftLore);
@@ -103,7 +103,7 @@ public final class BioScreen extends Screen {
                 tab == 0 ? "Back to chat" : "Save changes", true, b -> {
                     if (tab == 0) onClose(); else save();
                 }));
-        lines = font.split(Component.literal(profile.lore().isBlank() ? "An unwritten chapter.\n\nThis character has not shared their story yet." : profile.lore()), panelWidth - 58);
+        lines = font.split(Component.literal(profile.lore().isBlank() ? "Nothing here yet." : profile.lore()), panelWidth - 58);
         updateButton();
     }
 
@@ -220,7 +220,7 @@ public final class BioScreen extends Screen {
         rounded(g, left + 15, top + 13, 42, 42, 5, 0xFFAA8350);
         BioClient.portrait(g, target, left + 20, top + 18, 32, 1);
         var player = minecraft.getConnection() == null ? null : minecraft.getConnection().getPlayerInfo(target);
-        String username = player == null ? "Unknown traveler" : player.getProfile().getName();
+        String username = player == null ? "Unknown" : player.getProfile().getName();
         String name = profile.name().isBlank() ? username : profile.name();
         g.drawString(font, "B I O  B O O K", left + 68, top + 13, 0xFFD0AA70, false);
         g.drawString(font, font.plainSubstrByWidth(name, panelWidth - 118), left + 68, top + 29, 0xFFF3EBDD, false);
@@ -237,7 +237,7 @@ public final class BioScreen extends Screen {
     }
 
     private void renderLore(GuiGraphics g, long now, float dt) {
-        g.drawString(font, "THE STORY SO FAR", left + 24, bodyTop, 0xFFD0AA70, false);
+        g.drawString(font, "LORE", left + 24, bodyTop, 0xFFD0AA70, false);
         int textTop = bodyTop + 20;
         int available = bodyHeight - 20;
         float max = Math.max(0, lines.size() * 13 - available);
@@ -246,7 +246,7 @@ public final class BioScreen extends Screen {
         g.enableScissor(left + 20, textTop, left + panelWidth - 20, bodyTop + bodyHeight);
         float transition = 1 - Mth.clamp((now - tabChanged) / 180_000_000f, 0, 1);
         int y = textTop - (int) scroll + (int) (transition * transition * 10);
-        if (!loaded) g.drawString(font, "Turning to their chapter...", left + 24, y, 0xFF9AA8BB, false);
+        if (!loaded) g.drawString(font, "Loading...", left + 24, y, 0xFF9AA8BB, false);
         else for (FormattedCharSequence line : lines) {
             if (y + 9 >= textTop && y < bodyTop + bodyHeight) g.drawString(font, line, left + 24, y, 0xFFD5DCE5, false);
             y += 13;

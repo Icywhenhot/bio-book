@@ -6,7 +6,6 @@ plugins {
 }
 
 tasks.named('wrapper', Wrapper).configure {
-
     distributionType = Wrapper.DistributionType.BIN
 }
 
@@ -14,7 +13,6 @@ version = mod_version
 group = mod_group_id
 
 sourceSets.main.resources {
-
     srcDir('src/generated/resources')
 
     exclude("**/*.bbmodel")
@@ -22,7 +20,6 @@ sourceSets.main.resources {
 }
 
 repositories {
-
 }
 
 base {
@@ -31,12 +28,7 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
-if (project.hasProperty('biobookSmoke')) {
-    sourceSets.main.java.srcDir('validation/java')
-}
-
 neoForge {
-
     version = project.neo_version
 
     runs {
@@ -64,15 +56,12 @@ neoForge {
         }
 
         configureEach {
-
             systemProperty 'forge.logging.markers', 'REGISTRIES'
-
             logLevel = org.slf4j.event.Level.DEBUG
         }
     }
 
     mods {
-
         "${mod_id}" {
             sourceSet(sourceSets.main)
         }
@@ -84,7 +73,6 @@ configurations {
 }
 
 dependencies {
-
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
@@ -123,10 +111,6 @@ publishing {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-}
-
-tasks.named('jar').configure {
-    exclude('dev/biobook/validation/**')
 }
 
 idea {
