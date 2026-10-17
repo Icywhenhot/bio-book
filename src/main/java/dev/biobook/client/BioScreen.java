@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Predicate;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
@@ -84,8 +85,8 @@ public final class BioScreen extends Screen {
         if (loaded) {
             boolean idle = pending == -1;
             if (editing) {
-                nameBox = field(top + 24, Profile.NAME_LIMIT, draftName, "Character name");
-                subtitleBox = field(top + 40, Profile.SUBTITLE_LIMIT, draftSubtitle, "Title or tagline");
+                nameBox = field(top + 24, Profile.NAME_LIMIT, draftName, "Character name", s -> true);
+                subtitleBox = field(top + 40, Profile.SUBTITLE_LIMIT, fit(draftSubtitle), "Title or tagline", s -> wrap(s).size() <= 2);
                 loreBox = area(left + 26, top + 91, 85, draftLore, "Write your backstory...", "Public character lore");
                 nameBox.active = subtitleBox.active = loreBox.active = idle;
             }
@@ -97,8 +98,19 @@ public final class BioScreen extends Screen {
         updateButton();
     }
 
-    private EditBox field(int y, int limit, String value, String hint) {
-        EditBox box = addRenderableWidget(new EditBox(font, left + 72, y, 148, 10, Component.literal(hint)));
+    private EditBox field(int y, int limit, String value, String hint, Predicate<String> fits) {
+        EditBox box = addRenderableWidget(new EditBox(font, left + 72, y, 148, 10, Component.literal(hint)) {
+            @Override
+            public void insertText(String text) {
+                String old = getValue();
+                int cursor = getCursorPosition();
+                super.insertText(text);
+                if (fits.test(getValue())) return;
+                setValue(old);
+                setCursorPosition(cursor);
+                setHighlightPos(cursor);
+            }
+        });
         box.setBordered(false);
         box.setMaxLength(limit);
         box.setValue(value);
@@ -106,6 +118,15 @@ public final class BioScreen extends Screen {
         box.setTextColor(INK);
         box.setTextShadow(false);
         return box;
+    }
+
+    private List<FormattedCharSequence> wrap(String s) {
+        return font.split(Component.literal(s), 148);
+    }
+
+    private String fit(String s) {
+        while (wrap(s).size() > 2) s = s.substring(0, s.length() - 1);
+        return s;
     }
 
     private MultiLineEditBox area(int x, int y, int h, String value, String placeholder, String label) {
@@ -252,7 +273,8 @@ public final class BioScreen extends Screen {
             String name = profile.name().isBlank() ? username : profile.name();
             String subtitle = profile.subtitle().isBlank() ? "@" + username : profile.subtitle();
             g.text(font, font.plainSubstrByWidth(name, 148), left + 72, top + 26, INK, false);
-            g.text(font, font.plainSubstrByWidth(subtitle, 148), left + 72, top + 40, FADED, false);
+            List<FormattedCharSequence> rows = wrap(subtitle);
+            for (int i = 0; i < Math.min(2, rows.size()); i++) g.text(font, rows.get(i), left + 72, top + 38 + i * 10, FADED, false);
         }
         if (editing) scrollbar(g, loreBox);
         else renderLore(g, now, dt);
