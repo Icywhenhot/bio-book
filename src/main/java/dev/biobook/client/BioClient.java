@@ -2,6 +2,7 @@ package dev.biobook.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import dev.biobook.BioBook;
 import dev.biobook.BioNetwork;
 import java.util.UUID;
@@ -13,6 +14,7 @@ import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
@@ -74,7 +76,20 @@ public final class BioClient {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null) mc.tell(() -> mc.setScreen(new BioScreen(null, mc.player.getUUID())));
             return 1;
-        }));
+        }).then(Commands.argument("player", StringArgumentType.word())
+                .suggests((context, builder) -> SharedSuggestionProvider.suggest(context.getSource().getOnlinePlayerNames(), builder))
+                .executes(context -> {
+                    String name = StringArgumentType.getString(context, "player");
+                    Minecraft mc = Minecraft.getInstance();
+                    var info = mc.getConnection() == null ? null : mc.getConnection().getPlayerInfo(name);
+                    if (info == null) {
+                        context.getSource().sendFailure(Component.literal("No player named " + name + " online"));
+                        return 0;
+                    }
+                    UUID id = info.getProfile().getId();
+                    mc.tell(() -> mc.setScreen(new BioScreen(null, id)));
+                    return 1;
+                })));
     }
 
     public static UUID target(Style style) {
