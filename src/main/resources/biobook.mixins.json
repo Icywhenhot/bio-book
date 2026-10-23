@@ -1,12 +1,13 @@
 {
 	"required": true,
 	"package": "dev.biobook.mixin",
-	"compatibilityLevel": "JAVA_25",
+	"compatibilityLevel": "JAVA_21",
 	"client": [
+		"ChatComponentMixin",
 		"ChatListenerMixin",
-		"ChatBackgroundPortraitMixin",
-		"ChatFocusedPortraitMixin",
-		"ChatScreenMixin"
+		"ChatScreenAccessor",
+		"JournalTextColorMixin",
+		"JournalTextShadowMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

@@ -1,6 +1,9 @@
 package dev.biobook.client;
 
-import com.mojang.blaze3d.platform.InputConstants;
+import static dev.biobook.client.JournalTextBox.FADED;
+import static dev.biobook.client.JournalTextBox.INK;
+import static dev.biobook.client.JournalTextBox.LINE;
+
 import dev.biobook.BioBook;
 import dev.biobook.BioNetwork;
 import dev.biobook.Profile;
@@ -8,28 +11,24 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Predicate;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.MultiLineEditBox;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.CharacterEvent;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
+import org.lwjgl.glfw.GLFW;
 
 public final class BioScreen extends Screen {
     private record Draft(String name, String subtitle, String lore, String note) {}
     private static final Map<UUID, Draft> DRAFTS = new HashMap<>();
-    private static final Identifier BOOK = BioBook.id("textures/gui/book_background.png");
-    private static final Identifier HEAD = BioBook.id("textures/gui/player_head_icon.png");
+    private static final ResourceLocation BOOK = ResourceLocation.fromNamespaceAndPath(BioBook.ID, "textures/gui/book_background.png");
+    private static final ResourceLocation HEAD = ResourceLocation.fromNamespaceAndPath(BioBook.ID, "textures/gui/player_head_icon.png");
     private static final int W = 456, H = 245;
-    private static final int INK = 0xFF4A2F29, FADED = 0xFF835E56, LINE = 0xFFA3847D;
+    private final Screen parent;
     private final UUID target;
     private final long opened = System.nanoTime();
     private long closing;
@@ -51,8 +50,9 @@ public final class BioScreen extends Screen {
     private float scroll, scrollTarget;
     private long tabChanged = opened;
 
-    public BioScreen(UUID target) {
+    public BioScreen(Screen parent, UUID target) {
         super(Component.literal("Bio Book"));
+        this.parent = parent;
         this.target = target;
     }
 
@@ -85,8 +85,9 @@ public final class BioScreen extends Screen {
         if (loaded) {
             boolean idle = pending == -1;
             if (editing) {
-                nameBox = field(top + 24, Profile.NAME_LIMIT, draftName, "Character name", s -> true);
-                subtitleBox = field(top + 40, Profile.SUBTITLE_LIMIT, fit(draftSubtitle), "Title or tagline", s -> wrap(s).size() <= 2);
+                nameBox = field(top + 24, Profile.NAME_LIMIT, draftName, "Character name");
+                subtitleBox = field(top + 40, Profile.SUBTITLE_LIMIT, fit(draftSubtitle), "Title or tagline");
+                subtitleBox.setFilter(s -> wrap(s).size() <= 2);
                 loreBox = area(left + 26, top + 91, 85, draftLore, "Write your backstory...", "Public character lore");
                 nameBox.active = subtitleBox.active = loreBox.active = idle;
             }
@@ -98,25 +99,13 @@ public final class BioScreen extends Screen {
         updateButton();
     }
 
-    private EditBox field(int y, int limit, String value, String hint, Predicate<String> fits) {
-        EditBox box = addRenderableWidget(new EditBox(font, left + 72, y, 148, 10, Component.literal(hint)) {
-            @Override
-            public void insertText(String text) {
-                String old = getValue();
-                int cursor = getCursorPosition();
-                super.insertText(text);
-                if (fits.test(getValue())) return;
-                setValue(old);
-                setCursorPosition(cursor);
-                setHighlightPos(cursor);
-            }
-        });
+    private EditBox field(int y, int limit, String value, String hint) {
+        EditBox box = addRenderableWidget(new EditBox(font, left + 72, y, 148, 10, Component.literal(hint)));
         box.setBordered(false);
         box.setMaxLength(limit);
         box.setValue(value);
         box.setHint(Component.literal(hint).withColor(LINE));
         box.setTextColor(INK);
-        box.setTextShadow(false);
         return box;
     }
 
@@ -130,16 +119,8 @@ public final class BioScreen extends Screen {
     }
 
     private MultiLineEditBox area(int x, int y, int h, String value, String placeholder, String label) {
-        MultiLineEditBox box = addRenderableWidget(MultiLineEditBox.builder()
-                .setX(x)
-                .setY(y)
-                .setShowBackground(false)
-                .setShowDecorations(false)
-                .setTextShadow(false)
-                .setTextColor(INK)
-                .setCursorColor(INK)
-                .setPlaceholder(Component.literal(placeholder).withColor(LINE))
-                .build(font, 186, h, Component.literal(label)));
+        MultiLineEditBox box = addRenderableWidget(new JournalTextBox(font, x, y, 186, h,
+                Component.literal(placeholder).withColor(LINE), Component.literal(label)));
         box.setCharacterLimit(Profile.TEXT_LIMIT);
         box.setValue(value);
         return box;
@@ -230,27 +211,23 @@ public final class BioScreen extends Screen {
         else DRAFTS.put(target, new Draft(draftName, draftSubtitle, draftLore, draftNote));
     }
 
-    private void leave() {
-        minecraft.setScreenAndShow(minecraft.gui.hud.getChat().restoreChatScreen());
-    }
-
     @Override
     public void tick() {
-        if (minecraft.player == null) { minecraft.setScreenAndShow(null); return; }
+        if (minecraft.player == null) { minecraft.setScreen(null); return; }
         updateButton();
         if (pending != -1 && System.nanoTime() - requested > 8_000_000_000L) {
             pending = -1;
             status = "No response. Reopen to retry.";
             rebuild();
         }
-        if (closing != 0 && System.nanoTime() - closing > 150_000_000L) leave();
+        if (closing != 0 && System.nanoTime() - closing > 150_000_000L) minecraft.setScreen(parent);
     }
 
     @Override
-    public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {}
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {}
 
     @Override
-    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         long now = System.nanoTime();
         float dt = Math.min((now - frame) / 1_000_000_000f, 0.1f);
         frame = now;
@@ -259,48 +236,35 @@ public final class BioScreen extends Screen {
         if (closing != 0) ease *= 1 - Mth.clamp((now - closing) / 150_000_000f, 0, 1);
         g.fillGradient(0, 0, width, height, ((int) (175 * ease) << 24) | 0x080D17, ((int) (220 * ease) << 24) | 0x080D17);
         int lift = (int) ((1 - ease) * 18);
-        g.pose().pushMatrix();
-        g.pose().translate(0, lift);
-        g.blit(RenderPipelines.GUI_TEXTURED, BOOK, left, top, 0, 0, W, H, W, H);
-        g.blit(RenderPipelines.GUI_TEXTURED, HEAD, left + 20, top + 17, 0, 0, 45, 47, 45, 47);
+        g.pose().pushPose();
+        g.pose().translate(0, lift, 0);
+        g.blit(BOOK, left, top, 0, 0, W, H, W, H);
+        g.blit(HEAD, left + 20, top + 17, 0, 0, 45, 47, 45, 47);
         BioClient.portrait(g, target, left + 26, top + 28, 32, 1);
         if (editing && nameBox != null) {
             underline(g, nameBox);
             underline(g, subtitleBox);
         } else {
             var player = minecraft.getConnection() == null ? null : minecraft.getConnection().getPlayerInfo(target);
-            String username = player == null ? "Unknown" : player.getProfile().name();
+            String username = player == null ? "Unknown" : player.getProfile().getName();
             String name = profile.name().isBlank() ? username : profile.name();
             String subtitle = profile.subtitle().isBlank() ? "@" + username : profile.subtitle();
-            g.text(font, font.plainSubstrByWidth(name, 148), left + 72, top + 26, INK, false);
+            g.drawString(font, font.plainSubstrByWidth(name, 148), left + 72, top + 26, INK, false);
             List<FormattedCharSequence> rows = wrap(subtitle);
-            for (int i = 0; i < Math.min(2, rows.size()); i++) g.text(font, rows.get(i), left + 72, top + 38 + i * 10, FADED, false);
+            for (int i = 0; i < Math.min(2, rows.size()); i++) g.drawString(font, rows.get(i), left + 72, top + 38 + i * 10, FADED, false);
         }
-        if (editing) scrollbar(g, loreBox);
-        else renderLore(g, now, dt);
-        scrollbar(g, noteBox);
+        if (!editing) renderLore(g, now, dt);
         String footer = pending == -1 && loaded && (bioDirty() || noteDirty()) ? "Unsaved draft" : status;
-        g.text(font, font.plainSubstrByWidth(footer, 145), left + 27, top + 183, FADED, false);
-        super.extractRenderState(g, mouseX, mouseY - lift, partialTick);
-        g.pose().popMatrix();
+        g.drawString(font, font.plainSubstrByWidth(footer, 145), left + 27, top + 183, FADED, false);
+        super.render(g, mouseX, mouseY - lift, partialTick);
+        g.pose().popPose();
     }
 
-    private static void underline(GuiGraphicsExtractor g, EditBox box) {
+    private static void underline(GuiGraphics g, EditBox box) {
         g.fill(box.getX(), box.getY() + 10, box.getX() + box.getWidth(), box.getY() + 11, box.isFocused() ? FADED : LINE);
     }
 
-    private static void scrollbar(GuiGraphicsExtractor g, MultiLineEditBox box) {
-        if (box == null) return;
-        int max = box.maxScrollAmount();
-        if (max <= 0) return;
-        int x = box.getX() + box.getWidth() + 1, y = box.getY() + 2, h = box.getHeight() - 4;
-        int thumb = Math.min(h, Math.max(10, h * h / (box.getInnerHeight() + 4)));
-        int sy = y + (int) (box.scrollAmount() * (h - thumb) / max);
-        g.fill(x, y, x + 2, y + h, 0x40835E56);
-        g.fill(x, sy, x + 2, sy + thumb, FADED);
-    }
-
-    private void renderLore(GuiGraphicsExtractor g, long now, float dt) {
+    private void renderLore(GuiGraphics g, long now, float dt) {
         int textTop = top + 94, bottom = top + 175;
         int available = bottom - textTop;
         float max = Math.max(0, lines.size() * 10 - available);
@@ -309,9 +273,9 @@ public final class BioScreen extends Screen {
         g.enableScissor(left + 26, textTop, left + 214, bottom);
         float transition = 1 - Mth.clamp((now - tabChanged) / 180_000_000f, 0, 1);
         int y = textTop - (int) scroll + (int) (transition * transition * 10);
-        if (!loaded) g.text(font, "Loading...", left + 30, y, FADED, false);
+        if (!loaded) g.drawString(font, "Loading...", left + 30, y, FADED, false);
         else for (FormattedCharSequence line : lines) {
-            if (y + 9 >= textTop && y < bottom) g.text(font, line, left + 30, y, INK, false);
+            if (y + 9 >= textTop && y < bottom) g.drawString(font, line, left + 30, y, INK, false);
             y += 10;
         }
         g.disableScissor();
@@ -334,25 +298,25 @@ public final class BioScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(KeyEvent event) {
-        if (pending > 0 && !event.isEscape()) return true;
-        if (event.key() == InputConstants.KEY_S && event.hasControlDown()) { save(); return true; }
-        if (!editing && getFocused() != noteBox && (event.key() == InputConstants.KEY_PAGEDOWN || event.key() == InputConstants.KEY_PAGEUP)) {
-            scrollTarget += (event.key() == InputConstants.KEY_PAGEDOWN ? 1 : -1) * 80;
+    public boolean keyPressed(int key, int scan, int modifiers) {
+        if (pending > 0 && key != GLFW.GLFW_KEY_ESCAPE) return true;
+        if (key == GLFW.GLFW_KEY_S && hasControlDown()) { save(); return true; }
+        if (!editing && getFocused() != noteBox && (key == GLFW.GLFW_KEY_PAGE_DOWN || key == GLFW.GLFW_KEY_PAGE_UP)) {
+            scrollTarget += (key == GLFW.GLFW_KEY_PAGE_DOWN ? 1 : -1) * 80;
             return true;
         }
-        return super.keyPressed(event);
+        return super.keyPressed(key, scan, modifiers);
     }
 
     @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+    public boolean mouseClicked(double x, double y, int button) {
         if (closing != 0 || pending > 0 || System.nanoTime() - opened < 200_000_000L) return true;
-        return super.mouseClicked(event, doubleClick);
+        return super.mouseClicked(x, y, button);
     }
 
     @Override
-    public boolean charTyped(CharacterEvent event) {
-        return pending > 0 || super.charTyped(event);
+    public boolean charTyped(char character, int modifiers) {
+        return pending > 0 || super.charTyped(character, modifiers);
     }
 
     @Override

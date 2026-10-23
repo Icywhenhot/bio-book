@@ -37,8 +37,8 @@ public final class BioNetwork {
     }
 
     public static void register() {
-        PayloadTypeRegistry.serverboundPlay().register(Request.TYPE, Request.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(Reply.TYPE, Reply.CODEC);
+        PayloadTypeRegistry.playC2S().register(Request.TYPE, Request.CODEC);
+        PayloadTypeRegistry.playS2C().register(Reply.TYPE, Reply.CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(Request.TYPE, (request, context) -> {
             ServerPlayer player = context.player();

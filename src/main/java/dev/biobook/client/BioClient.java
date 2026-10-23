@@ -1,28 +1,32 @@
 package dev.biobook.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import dev.biobook.BioBook;
 import dev.biobook.BioNetwork;
+import dev.biobook.mixin.ChatScreenAccessor;
 import java.util.UUID;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.PlayerFaceExtractor;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
-import net.minecraft.util.ARGB;
 import net.minecraft.util.FormattedCharSequence;
+import org.lwjgl.glfw.GLFW;
 
 public final class BioClient implements ClientModInitializer {
     private static final String MARKER = "biobook:";
@@ -30,48 +34,57 @@ public final class BioClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        open = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.biobook.open", InputConstants.Type.KEYBOARD,
-                InputConstants.KEY_B, KeyMapping.Category.register(BioBook.id("journal"))));
+        open = KeyBindingHelper.registerKeyBinding(new KeyMapping("key.biobook.open", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_B, "key.categories.biobook"));
 
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+        ClientTickEvents.END_CLIENT_TICK.register(mc -> {
             while (open.consumeClick()) {
-                if (client.player != null && client.gui.screen() == null) {
-                    client.setScreenAndShow(new BioScreen(client.player.getUUID()));
-                }
+                if (mc.player != null && mc.screen == null) mc.setScreen(new BioScreen(null, mc.player.getUUID()));
             }
         });
 
+        ScreenEvents.AFTER_INIT.register((mc, screen, w, h) -> {
+            if (screen instanceof ChatScreen chat) ScreenMouseEvents.allowMouseClick(screen).register((s, x, y, button) -> !click(chat, x, y, button));
+        });
+
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registry) ->
-                dispatcher.register(ClientCommands.literal("bio").executes(context -> {
-                    Minecraft mc = Minecraft.getInstance();
-                    if (mc.player != null) mc.execute(() -> mc.setScreenAndShow(new BioScreen(mc.player.getUUID())));
+                dispatcher.register(ClientCommandManager.literal("bio").executes(context -> {
+                    Minecraft mc = context.getSource().getClient();
+                    if (mc.player != null) mc.tell(() -> mc.setScreen(new BioScreen(null, mc.player.getUUID())));
                     return 1;
-                }).then(ClientCommands.argument("player", StringArgumentType.word())
+                }).then(ClientCommandManager.argument("player", StringArgumentType.word())
                         .suggests((context, builder) -> SharedSuggestionProvider.suggest(context.getSource().getOnlinePlayerNames(), builder))
                         .executes(context -> {
                             String name = StringArgumentType.getString(context, "player");
                             Minecraft mc = context.getSource().getClient();
-                            var info = mc.getConnection() == null ? null : mc.getConnection().getPlayerInfoIgnoreCase(name);
+                            var info = mc.getConnection() == null ? null : mc.getConnection().getPlayerInfo(name);
                             if (info == null) {
                                 context.getSource().sendError(Component.literal("No player named " + name + " online"));
                                 return 0;
                             }
-                            UUID id = info.getProfile().id();
-                            mc.execute(() -> mc.setScreenAndShow(new BioScreen(id)));
+                            UUID id = info.getProfile().getId();
+                            mc.tell(() -> mc.setScreen(new BioScreen(null, id)));
                             return 1;
                         }))));
 
-        ClientPlayNetworking.registerGlobalReceiver(BioNetwork.Reply.TYPE, (reply, context) ->
-                context.client().execute(() -> {
-                    if (context.client().gui.screen() instanceof BioScreen screen) screen.receive(reply);
-                }));
+        ClientPlayNetworking.registerGlobalReceiver(BioNetwork.Reply.TYPE, (reply, context) -> {
+            if (context.client().screen instanceof BioScreen screen) screen.receive(reply);
+        });
 
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> BioScreen.clearDrafts());
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, mc) -> BioScreen.clearDrafts());
+    }
+
+    private static boolean click(ChatScreen chat, double x, double y, int button) {
+        if (button != 0) return false;
+        Minecraft mc = Minecraft.getInstance();
+        UUID target = target(mc.gui.getChat().getClickedComponentStyleAt(x, y));
+        if (target == null) return false;
+        mc.setScreen(new BioScreen(new ChatScreen(((ChatScreenAccessor) chat).biobook$getInput().getValue()), target));
+        return true;
     }
 
     public static Component withPortrait(Component message, UUID sender) {
         Style style = Style.EMPTY.withInsertion(MARKER + sender)
-                .withHoverEvent(new HoverEvent.ShowText(Component.literal("Open character journal")));
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Open character journal")));
         return Component.empty().append(Component.literal("   ").setStyle(style)).append(message);
     }
 
@@ -81,24 +94,22 @@ public final class BioClient implements ClientModInitializer {
         catch (IllegalArgumentException ignored) { return null; }
     }
 
-    public static void portrait(GuiGraphicsExtractor g, UUID id, int x, int y, int size, float alpha) {
+    public static void portrait(GuiGraphics graphics, UUID id, int x, int y, int size, float alpha) {
         Minecraft mc = Minecraft.getInstance();
         var player = mc.getConnection() == null ? null : mc.getConnection().getPlayerInfo(id);
         var skin = player == null ? DefaultPlayerSkin.get(id) : player.getSkin();
-        PlayerFaceExtractor.extractRenderState(g, skin, x, y, size, ARGB.white(alpha));
+        RenderSystem.enableBlend();
+        graphics.setColor(1, 1, 1, alpha);
+        PlayerFaceRenderer.draw(graphics, skin.texture(), x, y, size, true, false);
+        graphics.setColor(1, 1, 1, 1);
     }
 
-    public static UUID target(FormattedCharSequence text) {
+    public static void chatPortrait(GuiGraphics graphics, FormattedCharSequence text, int x, int y, int color) {
         UUID[] id = new UUID[1];
         text.accept((index, style, codepoint) -> {
             id[0] = target(style);
             return false;
         });
-        return id[0];
-    }
-
-    public static void chatPortrait(GuiGraphicsExtractor g, FormattedCharSequence text, int y, float alpha) {
-        UUID id = target(text);
-        if (id != null) portrait(g, id, 0, y, 8, alpha);
+        if (id[0] != null) portrait(graphics, id[0], x, y, 8, (color >>> 24) / 255f);
     }
 }
