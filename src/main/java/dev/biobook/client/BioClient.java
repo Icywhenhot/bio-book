@@ -20,6 +20,7 @@ import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
@@ -39,7 +40,7 @@ public final class BioClient {
 
     public BioClient(IEventBus bus) {
         bus.addListener((RegisterKeyMappingsEvent event) -> event.register(OPEN));
-        NeoForge.EVENT_BUS.addListener(BioClient::chat);
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, BioClient::chat);
         NeoForge.EVENT_BUS.addListener(BioClient::click);
         NeoForge.EVENT_BUS.addListener(BioClient::tick);
         NeoForge.EVENT_BUS.addListener(BioClient::commands);
