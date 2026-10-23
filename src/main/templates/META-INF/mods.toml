@@ -8,15 +8,15 @@ displayName="${mod_name}"
 logoFile="assets/biobook/logo.png"
 logoBlur=false
 description="Clickable chat portraits, character lore, and personal journal notes."
-[[mixins]]
-config="biobook.mixins.json"
 [[dependencies.${mod_id}]]
-modId="neoforge"
-type="required"
-versionRange="[${neo_version},)"
+modId="forge"
+mandatory=true
+versionRange="${loader_version_range}"
+ordering="NONE"
 side="BOTH"
 [[dependencies.${mod_id}]]
 modId="minecraft"
-type="required"
+mandatory=true
 versionRange="${minecraft_version_range}"
+ordering="NONE"
 side="BOTH"

@@ -3,7 +3,6 @@ package dev.biobook;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -13,7 +12,7 @@ public final class BioData extends SavedData {
     private final Map<UUID, Map<UUID, String>> notes = new HashMap<>();
 
     public static BioData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(new Factory<>(BioData::new, BioData::load), "biobook");
+        return server.overworld().getDataStorage().computeIfAbsent(BioData::load, BioData::new, "biobook");
     }
 
     public Profile profile(UUID id) {
@@ -36,7 +35,7 @@ public final class BioData extends SavedData {
         setDirty();
     }
 
-    public static BioData load(CompoundTag tag, HolderLookup.Provider registries) {
+    public static BioData load(CompoundTag tag) {
         BioData data = new BioData();
         CompoundTag profiles = tag.getCompound("profiles");
         for (String key : profiles.getAllKeys()) {
@@ -66,7 +65,7 @@ public final class BioData extends SavedData {
     }
 
     @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+    public CompoundTag save(CompoundTag tag) {
         CompoundTag people = new CompoundTag();
         profiles.forEach((id, profile) -> {
             CompoundTag p = new CompoundTag();

@@ -3,7 +3,6 @@ package dev.biobook.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import dev.biobook.BioBook;
 import dev.biobook.BioNetwork;
 import java.util.UUID;
 import net.minecraft.client.KeyMapping;
@@ -19,32 +18,29 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.EventPriority;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
-import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.client.event.ScreenEvent;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.common.NeoForge;
+import net.minecraftforge.client.event.ClientChatReceivedEvent;
+import net.minecraftforge.client.event.RegisterClientCommandsEvent;
+import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+import net.minecraftforge.client.event.ScreenEvent;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
+import net.minecraftforge.eventbus.api.IEventBus;
 import dev.biobook.mixin.ChatScreenAccessor;
 import org.lwjgl.glfw.GLFW;
 
-@Mod(value = BioBook.ID, dist = Dist.CLIENT)
 public final class BioClient {
     private static final String MARKER = "biobook:";
     private static final KeyMapping OPEN = new KeyMapping("key.biobook.open", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_B, "key.categories.biobook");
 
-    public BioClient(IEventBus bus) {
+    public static void init(IEventBus bus) {
         bus.addListener((RegisterKeyMappingsEvent event) -> event.register(OPEN));
-        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, BioClient::chat);
-        NeoForge.EVENT_BUS.addListener(BioClient::click);
-        NeoForge.EVENT_BUS.addListener(BioClient::tick);
-        NeoForge.EVENT_BUS.addListener(BioClient::commands);
-        NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event) -> BioScreen.clearDrafts());
+        MinecraftForge.EVENT_BUS.addListener(EventPriority.LOWEST, BioClient::chat);
+        MinecraftForge.EVENT_BUS.addListener(BioClient::click);
+        MinecraftForge.EVENT_BUS.addListener(BioClient::tick);
+        MinecraftForge.EVENT_BUS.addListener(BioClient::commands);
+        MinecraftForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event) -> BioScreen.clearDrafts());
         BioNetwork.receiver = reply -> {
             if (Minecraft.getInstance().screen instanceof BioScreen screen) screen.receive(reply);
         };
@@ -65,7 +61,8 @@ public final class BioClient {
         mc.setScreen(new BioScreen(new ChatScreen(((ChatScreenAccessor) chat).biobook$getInput().getValue()), target));
     }
 
-    private static void tick(ClientTickEvent.Post event) {
+    private static void tick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getInstance();
         while (OPEN.consumeClick()) {
             if (mc.player != null && mc.screen == null) mc.setScreen(new BioScreen(null, mc.player.getUUID()));
@@ -102,10 +99,10 @@ public final class BioClient {
     public static void portrait(GuiGraphics graphics, UUID id, int x, int y, int size, float alpha) {
         Minecraft mc = Minecraft.getInstance();
         var player = mc.getConnection() == null ? null : mc.getConnection().getPlayerInfo(id);
-        var skin = player == null ? DefaultPlayerSkin.get(id) : player.getSkin();
+        var skin = player == null ? DefaultPlayerSkin.getDefaultSkin(id) : player.getSkinLocation();
         RenderSystem.enableBlend();
         graphics.setColor(1, 1, 1, alpha);
-        PlayerFaceRenderer.draw(graphics, skin.texture(), x, y, size, true, false);
+        PlayerFaceRenderer.draw(graphics, skin, x, y, size, true, false);
         graphics.setColor(1, 1, 1, 1);
     }
 

@@ -1,7 +1,9 @@
 {
   "required": true,
+  "minVersion": "0.8",
   "package": "dev.biobook.mixin",
-  "compatibilityLevel": "JAVA_21",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "biobook.refmap.json",
   "client": ["ChatComponentMixin", "ChatScreenAccessor", "JournalTextColorMixin", "JournalTextShadowMixin"],
   "injectors": { "defaultRequire": 1 }
 }

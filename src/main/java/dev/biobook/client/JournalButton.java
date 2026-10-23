@@ -18,8 +18,8 @@ public final class JournalButton extends Button {
 
     public JournalButton(int x, int y, int width, int height, String name, String label, BooleanSupplier lit, Consumer<Button> action) {
         super(x, y, width, height, Component.literal(label), action::accept, DEFAULT_NARRATION);
-        tex = ResourceLocation.fromNamespaceAndPath(BioBook.ID, "textures/gui/" + name + ".png");
-        tint = ResourceLocation.fromNamespaceAndPath(BioBook.ID, "textures/gui/" + name + "_tint.png");
+        tex = new ResourceLocation(BioBook.ID, "textures/gui/" + name + ".png");
+        tint = new ResourceLocation(BioBook.ID, "textures/gui/" + name + "_tint.png");
         this.lit = lit;
     }
 

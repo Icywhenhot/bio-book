@@ -19,14 +19,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
-import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
 
 public final class BioScreen extends Screen {
     private record Draft(String name, String subtitle, String lore, String note) {}
     private static final Map<UUID, Draft> DRAFTS = new HashMap<>();
-    private static final ResourceLocation BOOK = ResourceLocation.fromNamespaceAndPath(BioBook.ID, "textures/gui/book_background.png");
-    private static final ResourceLocation HEAD = ResourceLocation.fromNamespaceAndPath(BioBook.ID, "textures/gui/player_head_icon.png");
+    private static final ResourceLocation BOOK = new ResourceLocation(BioBook.ID, "textures/gui/book_background.png");
+    private static final ResourceLocation HEAD = new ResourceLocation(BioBook.ID, "textures/gui/player_head_icon.png");
     private static final int W = 456, H = 245;
     private final Screen parent;
     private final UUID target;
@@ -104,9 +103,8 @@ public final class BioScreen extends Screen {
         box.setBordered(false);
         box.setMaxLength(limit);
         box.setValue(value);
-        box.setHint(Component.literal(hint).withColor(LINE));
+        box.setHint(Component.literal(hint).withStyle(s -> s.withColor(LINE)));
         box.setTextColor(INK);
-        box.setTextShadow(false);
         return box;
     }
 
@@ -121,7 +119,7 @@ public final class BioScreen extends Screen {
 
     private MultiLineEditBox area(int x, int y, int h, String value, String placeholder, String label) {
         MultiLineEditBox box = addRenderableWidget(new JournalTextBox(font, x, y, 186, h,
-                Component.literal(placeholder).withColor(LINE), Component.literal(label)));
+                Component.literal(placeholder).withStyle(s -> s.withColor(LINE)), Component.literal(label)));
         box.setCharacterLimit(Profile.TEXT_LIMIT);
         box.setValue(value);
         return box;
@@ -147,7 +145,7 @@ public final class BioScreen extends Screen {
         if (minecraft.getConnection() == null) return;
         pending = action;
         requested = System.nanoTime();
-        PacketDistributor.sendToServer(new BioNetwork.Request(target, action, action == 1 ? draftName : "",
+        BioNetwork.CHANNEL.sendToServer(new BioNetwork.Request(target, action, action == 1 ? draftName : "",
                 action == 1 ? draftSubtitle : "", action == 1 ? draftLore : action == 2 ? draftNote : ""));
     }
 
@@ -225,9 +223,6 @@ public final class BioScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {}
-
-    @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         long now = System.nanoTime();
         float dt = Math.min((now - frame) / 1_000_000_000f, 0.1f);
@@ -293,9 +288,9 @@ public final class BioScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
-        if (!editing && overLore(x, y)) { scrollTarget -= (float) vertical * 20; return true; }
-        return super.mouseScrolled(x, y, horizontal, vertical);
+    public boolean mouseScrolled(double x, double y, double delta) {
+        if (!editing && overLore(x, y)) { scrollTarget -= (float) delta * 20; return true; }
+        return super.mouseScrolled(x, y, delta);
     }
 
     @Override
